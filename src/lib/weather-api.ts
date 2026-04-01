@@ -1,12 +1,7 @@
 import type { RealtimeResult, HourlyResult, DailyResult } from './types'
 
-const BASE_URL = import.meta.env.DEV ? '/api/caiyun/v2.6' : 'https://api.caiyunapp.com/v2.6'
-
-function getToken(): string {
-  const token = import.meta.env.VITE_CAIYUN_TOKEN
-  if (!token) throw new Error('VITE_CAIYUN_TOKEN 未配置')
-  return token
-}
+// Token 由服务端注入（Nginx 代理 / Vite dev proxy），前端不再持有
+const BASE_URL = '/api/caiyun'
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -15,16 +10,13 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 export async function fetchRealtime(lng: number, lat: number): Promise<RealtimeResult> {
-  const token = getToken()
-  return fetchJson(`${BASE_URL}/${token}/${lng},${lat}/realtime`)
+  return fetchJson(`${BASE_URL}/${lng},${lat}/realtime`)
 }
 
 export async function fetchHourly(lng: number, lat: number): Promise<HourlyResult> {
-  const token = getToken()
-  return fetchJson(`${BASE_URL}/${token}/${lng},${lat}/hourly?hourlysteps=48`)
+  return fetchJson(`${BASE_URL}/${lng},${lat}/hourly?hourlysteps=48`)
 }
 
 export async function fetchDaily(lng: number, lat: number): Promise<DailyResult> {
-  const token = getToken()
-  return fetchJson(`${BASE_URL}/${token}/${lng},${lat}/daily?dailysteps=3`)
+  return fetchJson(`${BASE_URL}/${lng},${lat}/daily?dailysteps=3`)
 }

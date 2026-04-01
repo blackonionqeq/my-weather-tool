@@ -41,11 +41,14 @@ my-weather-tool/
 │   │   ├── HourlyForecast.svelte  # 小时预报横向列表（核心）
 │   │   └── DailyForecast.svelte   # 近 3 天预报
 │   ├── lib/
-│   │   ├── weather-api.ts         # 彩云 API 封装（3 个接口）
+│   │   ├── weather-api.ts         # 彩云 API 封装（3 个接口，token 由服务端注入）
 │   │   ├── types.ts               # API 响应 TypeScript 类型定义
 │   │   └── storage.ts             # localStorage 缓存读写
 │   └── styles/
 │       └── global.css             # CSS 变量 + 全局样式
+├── deploy/
+│   └── nginx/
+│       └── caiyun-proxy.conf      # Nginx 反向代理配置（include 到主配置）
 ├── public/
 │   ├── manifest.json              # PWA manifest
 │   └── icons/                     # 各尺寸 App 图标
@@ -67,10 +70,11 @@ my-weather-tool/
 | 小时预报 | `/hourly?hourlysteps=48` | 未来 48h（核心功能）|
 | 天预报 | `/daily?dailysteps=3` | 近 3 天高低温 |
 
-**API Key：**
-- 开发阶段：存 `.env` 文件，`VITE_CAIYUN_TOKEN=xxx`
+**API Key（服务端代理，前端不持有 token）：**
+- **生产环境：** Nginx 反向代理注入 token，配置见 `deploy/nginx/caiyun-proxy.conf`
+- **开发环境：** Vite dev proxy 从 `.env` 读取 `VITE_CAIYUN_TOKEN`，在 rewrite 阶段注入
 - `.env` 加入 `.gitignore`，**严禁提交 key**
-- 在代码中通过 `import.meta.env.VITE_CAIYUN_TOKEN` 读取
+- 前端代码统一请求 `/api/caiyun/{lng},{lat}/endpoint`，不接触 token
 
 **三个接口并发调用：**
 ```ts
@@ -158,7 +162,7 @@ weather:cache:ts      # 时间戳，ISO 字符串
 | 1 | 静态页面 + 布局 + 假数据渲染 | ✅ 已完成 |
 | 2 | 接入定位 + 彩云 API | ✅ 已完成 |
 | 3 | vite-plugin-pwa + manifest，完成 PWA 化 | ✅ 已完成 |
-| 4 | 服务器代理替换 key（Vercel/Cloudflare）| 可选 |
+| 4 | Nginx 反向代理隐藏 API key | ✅ 已完成 |
 
 ---
 
