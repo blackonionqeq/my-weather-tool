@@ -1,6 +1,6 @@
 {
-  "name": "天气",
-  "short_name": "天气",
+  "name": "我的天气",
+  "short_name": "我的天气",
   "description": "基于彩云天气的小时级精准天气预报",
   "start_url": "/",
   "display": "standalone",
