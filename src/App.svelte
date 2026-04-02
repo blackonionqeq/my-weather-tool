@@ -46,9 +46,9 @@
       
       const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
-          timeout: 60000,
+          timeout: Infinity,
           maximumAge: Infinity,
-          enableHighAccuracy: false,
+          enableHighAccuracy: true,
         })
       })
       console.log('[Location] 获取成功:', pos.coords.longitude, pos.coords.latitude)
