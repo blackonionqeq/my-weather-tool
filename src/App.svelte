@@ -38,17 +38,35 @@
     let lat: number
 
     try {
+      if (!navigator.geolocation) {
+        throw new Error('当前环境不支持定位 (可能因为未开启 HTTPS)')
+      }
+
+      console.log('[Location] 正在获取位置...')
+      
       const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
-          timeout: 10000,
+          timeout: 20000,
           maximumAge: 300000,
         })
       })
+      console.log('[Location] 获取成功:', pos.coords.longitude, pos.coords.latitude)
       lng = pos.coords.longitude
       lat = pos.coords.latitude
-    } catch (err) {
+    } catch (err: any) {
+      console.error('[Location Error] 获取失败:', err)
+      
+      let detailedMsg = err.message || '未知错误'
+      if (err instanceof GeolocationPositionError) {
+        if (err.code === err.PERMISSION_DENIED) detailedMsg = '用户拒绝了位置权限'
+        if (err.code === err.POSITION_UNAVAILABLE) detailedMsg = '位置信息不可用'
+        if (err.code === err.TIMEOUT) detailedMsg = '获取位置超时'
+        console.error(`[Location Error] Code: ${err.code}, Message: ${err.message}`)
+      }
+
       const cached = loadCache()
       if (cached) {
+        console.log('[Location] 使用缓存数据')
         weather = {
           current: transformRealtime(cached.data.realtime),
           hourly: transformHourly(cached.data.hourly),
@@ -60,7 +78,7 @@
         errorMsg =
           err instanceof GeolocationPositionError && err.code === err.PERMISSION_DENIED
             ? '请允许位置权限后刷新页面'
-            : '定位失败，请检查位置权限'
+            : `定位失败 (${detailedMsg})，请检查系统位置服务和浏览器权限`
         phase = 'error'
       }
       return
