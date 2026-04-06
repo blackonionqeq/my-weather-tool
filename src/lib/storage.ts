@@ -2,6 +2,7 @@ import type { WeatherCache } from './types'
 
 const CACHE_KEY = 'weather:cache'
 const CACHE_TS_KEY = 'weather:cache:ts'
+const LOCATION_KEY = 'weather:location'
 
 export function saveCache(data: WeatherCache): void {
   localStorage.setItem(CACHE_KEY, JSON.stringify(data))
@@ -24,6 +25,20 @@ export function isCacheFresh(maxAgeMs = 10 * 60 * 1000): boolean {
   const ts = localStorage.getItem(CACHE_TS_KEY)
   if (!ts) return false
   return Date.now() - new Date(ts).getTime() < maxAgeMs
+}
+
+export function saveLocation(lng: number, lat: number): void {
+  localStorage.setItem(LOCATION_KEY, JSON.stringify({ lng, lat }))
+}
+
+export function loadLocation(): { lng: number; lat: number } | null {
+  const raw = localStorage.getItem(LOCATION_KEY)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as { lng: number; lat: number }
+  } catch {
+    return null
+  }
 }
 
 export function formatCacheAge(ts: string): string {

@@ -89,16 +89,14 @@ const [realtime, hourly, daily] = await Promise.all([
 
 ## 地理位置
 
-```ts
-navigator.geolocation.getCurrentPosition(
-  (pos) => { /* 成功：拿到 lat/lng */ },
-  (err) => { /* 失败：展示友好提示，尝试读取缓存 */ },
-  { timeout: 10000, maximumAge: 300000 }
-);
-```
+**启动流程：**
+1. 读 `weather:location` 缓存坐标 → 有则直接用缓存坐标拉天气（跳过 GPS 等待）
+2. 无缓存坐标 → 调 GPS 定位，成功后保存坐标再拉天气
+
+**重新定位：** 右上角 📍 按钮，触发强制 GPS（`maximumAge: 0`），成功后更新坐标并立即拉取最新天气。
 
 - 必须 HTTPS（本地 dev 用 localhost 豁免）
-- 权限拒绝时展示明确提示，不静默失败
+- 权限拒绝 / 定位失败时展示明确提示，有天气缓存则继续展示旧数据
 
 ---
 
@@ -114,6 +112,7 @@ navigator.geolocation.getCurrentPosition(
 ```
 weather:cache         # JSON，包含 realtime/hourly/daily 数据
 weather:cache:ts      # 时间戳，ISO 字符串
+weather:location      # JSON，{ lng: number, lat: number }，上次成功定位的坐标
 ```
 
 ---

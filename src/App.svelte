@@ -3,7 +3,7 @@
   import HourlyForecast from './components/HourlyForecast.svelte'
   import DailyForecast from './components/DailyForecast.svelte'
   import { fetchRealtime, fetchHourly, fetchDaily } from './lib/weather-api'
-  import { saveCache, loadCache, formatCacheAge, isCacheFresh } from './lib/storage'
+  import { saveCache, loadCache, formatCacheAge, saveLocation, loadLocation } from './lib/storage'
   import { transformRealtime, transformHourly, transformDaily } from './lib/transform'
   import type { WeatherViewState } from './lib/types'
 
@@ -13,78 +13,11 @@
   let weather = $state<WeatherViewState | null>(null)
   let cacheAge = $state<string | null>(null)
   let errorMsg = $state('')
+  let gpsError = $state('')
 
   const isLoading = $derived(phase === 'locating' || phase === 'loading')
 
-  async function loadWeather() {
-    // Use fresh cache to avoid burning API quota during development
-    const cached = loadCache()
-    if (isCacheFresh() && cached) {
-      weather = {
-        current: transformRealtime(cached.data.realtime),
-        hourly: transformHourly(cached.data.hourly),
-        daily: transformDaily(cached.data.daily),
-      }
-      cacheAge = formatCacheAge(cached.ts)
-      phase = 'ready'
-      return
-    }
-
-    phase = 'locating'
-    cacheAge = null
-    errorMsg = ''
-
-    let lng: number
-    let lat: number
-
-    try {
-      if (!navigator.geolocation) {
-        throw new Error('当前环境不支持定位 (可能因为未开启 HTTPS)')
-      }
-
-      console.log('[Location] 正在获取位置...')
-      
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          timeout: Infinity,
-          maximumAge: Infinity,
-          enableHighAccuracy: true,
-        })
-      })
-      console.log('[Location] 获取成功:', pos.coords.longitude, pos.coords.latitude)
-      lng = pos.coords.longitude
-      lat = pos.coords.latitude
-    } catch (err: any) {
-      console.error('[Location Error] 获取失败:', err)
-      
-      let detailedMsg = err.message || '未知错误'
-      if (err instanceof GeolocationPositionError) {
-        if (err.code === err.PERMISSION_DENIED) detailedMsg = '用户拒绝了位置权限'
-        if (err.code === err.POSITION_UNAVAILABLE) detailedMsg = '位置信息不可用'
-        if (err.code === err.TIMEOUT) detailedMsg = '获取位置超时'
-        console.error(`[Location Error] Code: ${err.code}, Message: ${err.message}`)
-      }
-
-      const cached = loadCache()
-      if (cached) {
-        console.log('[Location] 使用缓存数据')
-        weather = {
-          current: transformRealtime(cached.data.realtime),
-          hourly: transformHourly(cached.data.hourly),
-          daily: transformDaily(cached.data.daily),
-        }
-        cacheAge = formatCacheAge(cached.ts)
-        phase = 'ready'
-      } else {
-        errorMsg =
-          err instanceof GeolocationPositionError && err.code === err.PERMISSION_DENIED
-            ? '请允许位置权限后刷新页面'
-            : `定位失败 (${detailedMsg})，请检查系统位置服务和浏览器权限`
-        phase = 'error'
-      }
-      return
-    }
-
+  async function fetchWeatherData(lng: number, lat: number) {
     phase = 'loading'
     try {
       const [realtime, hourly, daily] = await Promise.all([
@@ -98,6 +31,7 @@
         hourly: transformHourly(hourly),
         daily: transformDaily(daily),
       }
+      cacheAge = null
       phase = 'ready'
     } catch {
       const cached = loadCache()
@@ -113,6 +47,66 @@
         errorMsg = '网络请求失败，暂无缓存数据'
         phase = 'error'
       }
+    }
+  }
+
+  async function doGps() {
+    gpsError = ''
+    phase = 'locating'
+
+    try {
+      if (!navigator.geolocation) {
+        throw new Error('当前环境不支持定位 (可能因为未开启 HTTPS)')
+      }
+
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          timeout: Infinity,
+          maximumAge: 0,
+          enableHighAccuracy: true,
+        })
+      })
+      const { longitude: lng, latitude: lat } = pos.coords
+      saveLocation(lng, lat)
+      await fetchWeatherData(lng, lat)
+    } catch (err: any) {
+      let msg = err.message || '定位失败'
+      if (err instanceof GeolocationPositionError) {
+        if (err.code === err.PERMISSION_DENIED) msg = '请允许位置权限后重试'
+        if (err.code === err.POSITION_UNAVAILABLE) msg = '位置信息不可用'
+        if (err.code === err.TIMEOUT) msg = '获取位置超时'
+      }
+
+      const cached = loadCache()
+      if (cached) {
+        if (!weather) {
+          weather = {
+            current: transformRealtime(cached.data.realtime),
+            hourly: transformHourly(cached.data.hourly),
+            daily: transformDaily(cached.data.daily),
+          }
+          cacheAge = formatCacheAge(cached.ts)
+        }
+        gpsError = msg
+        phase = 'ready'
+      } else {
+        errorMsg = msg
+        phase = 'error'
+      }
+    }
+  }
+
+  async function relocate() {
+    if (isLoading) return
+    await doGps()
+  }
+
+  async function loadWeather() {
+    const loc = loadLocation()
+    if (loc) {
+      await fetchWeatherData(loc.lng, loc.lat)
+    } else {
+      await doGps()
     }
   }
 
@@ -133,10 +127,10 @@
       <button
         type="button"
         class="refresh"
-        aria-label="刷新天气"
+        aria-label="重新定位"
         disabled={isLoading}
-        onclick={loadWeather}
-      >{isLoading ? '···' : '刷新'}</button>
+        onclick={relocate}
+      >{isLoading ? '···' : '📍'}</button>
     </header>
 
     {#if phase === 'error'}
@@ -150,6 +144,9 @@
         <p class="status-text">{phase === 'locating' ? '正在获取位置…' : '正在加载天气…'}</p>
       </div>
     {:else}
+      {#if gpsError}
+        <p class="gps-error">📍 {gpsError}</p>
+      {/if}
       {#if cacheAge}
         <p class="cache-notice">离线数据 · {cacheAge}</p>
       {/if}
@@ -250,6 +247,16 @@
   .status-text {
     color: var(--color-text-muted);
     font-size: 0.95rem;
+  }
+
+  .gps-error {
+    font-size: 0.78rem;
+    color: rgb(251 113 133);
+    text-align: center;
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid rgb(251 113 133 / 25%);
+    border-radius: var(--radius-sm);
+    background: rgb(251 113 133 / 8%);
   }
 
   .cache-notice {
