@@ -40,10 +40,12 @@ my-weather-tool/
 │   │   ├── CurrentWeather.svelte  # 当前天气区块
 │   │   ├── HourlyForecast.svelte  # 小时预报横向列表（核心）
 │   │   └── DailyForecast.svelte   # 近 3 天预报
+│   ├── sw.ts                      # 自定义 Service Worker（预缓存 + 降雨后台检查）
 │   ├── lib/
 │   │   ├── weather-api.ts         # 彩云 API 封装（3 个接口，token 由服务端注入）
 │   │   ├── types.ts               # API 响应 TypeScript 类型定义
-│   │   └── storage.ts             # localStorage 缓存读写
+│   │   ├── storage.ts             # localStorage + Cache API 缓存读写
+│   │   └── rain-check.ts          # 降雨判定纯函数（供 SW 和主线程共用）
 │   └── styles/
 │       └── global.css             # CSS 变量 + 全局样式
 ├── deploy/
@@ -113,7 +115,14 @@ const [realtime, hourly, daily] = await Promise.all([
 weather:cache         # JSON，包含 realtime/hourly/daily 数据
 weather:cache:ts      # 时间戳，ISO 字符串
 weather:location      # JSON，{ lng: number, lat: number }，上次成功定位的坐标
+weather:rain-alert    # "on" | "off"，降雨提醒开关状态
 ```
+
+**Cache API（主线程 ↔ Service Worker 共享数据）：**
+```
+rain-alert / /_rain-alert-config   # JSON，{ lng, lat, enabled }，供 SW 后台读取坐标
+```
+> localStorage 无法在 SW 中使用，因此用 Cache API 共享坐标和开关状态。
 
 ---
 
@@ -132,8 +141,10 @@ weather:location      # JSON，{ lng: number, lat: number }，上次成功定位
 ```
 
 **vite.config.ts** 中 `vite-plugin-pwa`：
+- `strategies: 'injectManifest'`（自定义 SW，源文件 `src/sw.ts`）
 - `registerType: 'autoUpdate'`
-- `workbox.runtimeCaching` 不缓存彩云 API 请求（由应用层 localStorage 管理）
+- 预缓存静态资源，不缓存彩云 API 请求（由应用层 localStorage 管理）
+- 主线程通过 `import { registerSW } from 'virtual:pwa-register'` 注册 SW
 
 ---
 
@@ -162,6 +173,25 @@ weather:location      # JSON，{ lng: number, lat: number }，上次成功定位
 | 2 | 接入定位 + 彩云 API | ✅ 已完成 |
 | 3 | vite-plugin-pwa + manifest，完成 PWA 化 | ✅ 已完成 |
 | 4 | Nginx 反向代理隐藏 API key | ✅ 已完成 |
+| 5 | 后台降雨提醒（Periodic Background Sync + 本地通知） | ✅ 已完成 |
+
+---
+
+## 降雨提醒（后台通知）
+
+**原理：** Periodic Background Sync 定期唤醒 Service Worker → 拉取 realtime + hourly 接口 → 当前非雨但下一小时是雨时推送本地通知。
+
+**浏览器支持：** 仅 Chromium 系（Chrome / Edge / Samsung Browser），不支持的浏览器中 🔔 按钮自动隐藏。
+
+**核心流程：**
+1. 用户点击 🔔 开关 → 请求 Notification 权限 → 注册 `periodicSync`（tag: `rain-check`, minInterval: 1h）
+2. 坐标通过 Cache API 写入，供 SW 读取（SW 无法访问 localStorage）
+3. SW 醒来 → 读坐标 → 请求 API → `shouldAlertRain()` 判定 → `showNotification()`
+4. 点击通知 → 打开 / 聚焦应用窗口
+
+**降雨判定规则：** 当前 skycon 不含 RAIN + 下一小时 skycon ∈ `[LIGHT_RAIN, MODERATE_RAIN, HEAVY_RAIN, STORM_RAIN]`。天然防重复：持续下雨时当前已是雨天，不会再次触发。
+
+**设计文档：** `docs/superpowers/specs/2026-04-06-rain-alert-design.md`（含方案 B 服务端推送升级路径）
 
 ---
 

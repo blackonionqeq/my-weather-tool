@@ -23,14 +23,13 @@ export default defineConfig(({ mode }) => {
       basicSsl(),
       svelte(),
       VitePWA({
+        strategies: 'injectManifest',
+        srcDir: 'src',
+        filename: 'sw.ts',
         registerType: 'autoUpdate',
         manifest: false, // 使用 public/manifest.json
-        workbox: {
+        injectManifest: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-          runtimeCaching: [
-            // 不缓存彩云 API，由应用层 localStorage 管理
-          ],
-          navigateFallback: 'index.html',
         },
       }),
     ],

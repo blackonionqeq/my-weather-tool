@@ -49,3 +49,32 @@ export function formatCacheAge(ts: string): string {
   const hours = Math.floor(minutes / 60)
   return `${hours} 小时前`
 }
+
+// --- 降雨提醒偏好 ---
+
+const RAIN_ALERT_KEY = 'weather:rain-alert'
+const RAIN_ALERT_CACHE_NAME = 'rain-alert'
+const RAIN_ALERT_CONFIG_URL = '/_rain-alert-config'
+
+export function saveRainAlertPref(on: boolean): void {
+  localStorage.setItem(RAIN_ALERT_KEY, on ? 'on' : 'off')
+}
+
+export function loadRainAlertPref(): boolean {
+  return localStorage.getItem(RAIN_ALERT_KEY) === 'on'
+}
+
+/** 写入 Cache API，供 Service Worker 读取坐标和开关状态 */
+export async function saveRainAlertConfig(lng: number, lat: number, enabled: boolean): Promise<void> {
+  const cache = await caches.open(RAIN_ALERT_CACHE_NAME)
+  await cache.put(
+    new Request(RAIN_ALERT_CONFIG_URL),
+    new Response(JSON.stringify({ lng, lat, enabled })),
+  )
+}
+
+/** 清除 Cache API 中的降雨提醒配置 */
+export async function clearRainAlertConfig(): Promise<void> {
+  const cache = await caches.open(RAIN_ALERT_CACHE_NAME)
+  await cache.delete(RAIN_ALERT_CONFIG_URL)
+}

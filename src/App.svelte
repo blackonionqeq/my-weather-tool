@@ -3,7 +3,7 @@
   import HourlyForecast from './components/HourlyForecast.svelte'
   import DailyForecast from './components/DailyForecast.svelte'
   import { fetchRealtime, fetchHourly, fetchDaily } from './lib/weather-api'
-  import { saveCache, loadCache, formatCacheAge, saveLocation, loadLocation } from './lib/storage'
+  import { saveCache, loadCache, formatCacheAge, saveLocation, loadLocation, saveRainAlertPref, loadRainAlertPref, saveRainAlertConfig, clearRainAlertConfig } from './lib/storage'
   import { transformRealtime, transformHourly, transformDaily } from './lib/transform'
   import type { WeatherViewState } from './lib/types'
 
@@ -16,6 +16,52 @@
   let gpsError = $state('')
 
   const isLoading = $derived(phase === 'locating' || phase === 'loading')
+
+  // --- 降雨提醒 ---
+  let rainAlertOn = $state(loadRainAlertPref())
+  let rainAlertSupported = $state(false)
+
+  function checkRainAlertSupport(): boolean {
+    return 'serviceWorker' in navigator
+      && 'Notification' in window
+      && 'periodicSync' in (ServiceWorkerRegistration.prototype as any)
+  }
+
+  async function toggleRainAlert() {
+    if (rainAlertOn) {
+      // 关闭
+      rainAlertOn = false
+      saveRainAlertPref(false)
+      await clearRainAlertConfig()
+      const reg = await navigator.serviceWorker.ready
+      await (reg as any).periodicSync?.unregister('rain-check').catch(() => {})
+      return
+    }
+
+    // 开启：先请求通知权限
+    const perm = await Notification.requestPermission()
+    if (perm !== 'granted') {
+      gpsError = '通知权限被拒绝，无法开启降雨提醒'
+      return
+    }
+
+    // 注册 periodic sync
+    const reg = await navigator.serviceWorker.ready
+    try {
+      await (reg as any).periodicSync.register('rain-check', { minInterval: 60 * 60 * 1000 })
+    } catch {
+      gpsError = '后台同步注册失败，可能需要将应用添加到桌面'
+      return
+    }
+
+    // 写入配置
+    const loc = loadLocation()
+    if (loc) {
+      await saveRainAlertConfig(loc.lng, loc.lat, true)
+    }
+    rainAlertOn = true
+    saveRainAlertPref(true)
+  }
 
   async function fetchWeatherData(lng: number, lat: number) {
     phase = 'loading'
@@ -68,6 +114,10 @@
       })
       const { longitude: lng, latitude: lat } = pos.coords
       saveLocation(lng, lat)
+      // 如果降雨提醒开启，同步更新 Cache API 中的坐标
+      if (rainAlertOn) {
+        await saveRainAlertConfig(lng, lat, true)
+      }
       await fetchWeatherData(lng, lat)
     } catch (err: any) {
       let msg = err.message || '定位失败'
@@ -111,6 +161,7 @@
   }
 
   $effect(() => {
+    rainAlertSupported = checkRainAlertSupport()
     loadWeather()
   })
 </script>
@@ -124,13 +175,24 @@
         <p class="app-title">MY WEATHER</p>
         <p class="app-subtitle">小时级天气预报</p>
       </div>
-      <button
-        type="button"
-        class="refresh"
-        aria-label="重新定位"
-        disabled={isLoading}
-        onclick={relocate}
-      >{isLoading ? '···' : '📍'}</button>
+      <div class="header-actions">
+        {#if rainAlertSupported}
+          <button
+            type="button"
+            class="rain-alert-btn"
+            class:active={rainAlertOn}
+            aria-label={rainAlertOn ? '关闭降雨提醒' : '开启降雨提醒'}
+            onclick={toggleRainAlert}
+          >🔔</button>
+        {/if}
+        <button
+          type="button"
+          class="refresh"
+          aria-label="重新定位"
+          disabled={isLoading}
+          onclick={relocate}
+        >{isLoading ? '···' : '📍'}</button>
+      </div>
     </header>
 
     {#if phase === 'error'}
@@ -228,6 +290,34 @@
     opacity: 0.5;
     cursor: default;
     transform: none;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+
+  .rain-alert-btn {
+    border: 1px solid rgb(255 255 255 / 14%);
+    background: linear-gradient(180deg, rgb(255 255 255 / 12%), rgb(255 255 255 / 4%));
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    opacity: 0.45;
+    transition: transform 160ms ease, border-color 160ms ease, opacity 160ms ease;
+  }
+
+  .rain-alert-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgb(255 255 255 / 26%);
+  }
+
+  .rain-alert-btn.active {
+    opacity: 1;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 8px rgb(56 189 248 / 30%);
   }
 
   .status-card {
