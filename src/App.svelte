@@ -3,7 +3,12 @@
   import HourlyForecast from './components/HourlyForecast.svelte'
   import DailyForecast from './components/DailyForecast.svelte'
   import { fetchRealtime, fetchHourly, fetchDaily } from './lib/weather-api'
-  import { saveCache, loadCache, formatCacheAge, saveLocation, loadLocation, saveRainAlertPref, loadRainAlertPref, saveRainAlertConfig, clearRainAlertConfig } from './lib/storage'
+  import { saveCache, loadCache, formatCacheAge, saveLocation, loadLocation, saveRainAlertPref, loadRainAlertPref } from './lib/storage'
+  import {
+    deleteRainAlertSubscription,
+    getOrCreatePushSubscription,
+    saveRainAlertSubscription,
+  } from './lib/rain-alert-client'
   import { transformRealtime, transformHourly, transformDaily } from './lib/transform'
   import type { WeatherViewState } from './lib/types'
 
@@ -20,47 +25,92 @@
   // --- 降雨提醒 ---
   let rainAlertOn = $state(loadRainAlertPref())
   let rainAlertSupported = $state(false)
+  let rainAlertBusy = $state(false)
 
   function checkRainAlertSupport(): boolean {
     return 'serviceWorker' in navigator
       && 'Notification' in window
-      && 'periodicSync' in (ServiceWorkerRegistration.prototype as any)
+      && 'PushManager' in window
+  }
+
+  function getErrorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error ? error.message : fallback
+  }
+
+  async function requestCurrentLocation(): Promise<{ lng: number; lat: number }> {
+    if (!navigator.geolocation) {
+      throw new Error('当前环境不支持定位 (可能因为未开启 HTTPS)')
+    }
+
+    const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        timeout: Infinity,
+        maximumAge: 0,
+        enableHighAccuracy: true,
+      })
+    })
+
+    const location = {
+      lng: pos.coords.longitude,
+      lat: pos.coords.latitude,
+    }
+    saveLocation(location.lng, location.lat)
+    return location
+  }
+
+  async function getRainAlertLocation(): Promise<{ lng: number; lat: number }> {
+    return loadLocation() ?? requestCurrentLocation()
+  }
+
+  async function syncRainAlertLocation(lng: number, lat: number): Promise<void> {
+    const reg = await navigator.serviceWorker.ready
+    const subscription = await reg.pushManager.getSubscription()
+    if (!subscription) {
+      throw new Error('未找到有效的推送订阅，请重新开启降雨提醒')
+    }
+
+    await saveRainAlertSubscription(subscription, lng, lat)
   }
 
   async function toggleRainAlert() {
-    if (rainAlertOn) {
-      // 关闭
-      rainAlertOn = false
-      saveRainAlertPref(false)
-      await clearRainAlertConfig()
-      const reg = await navigator.serviceWorker.ready
-      await (reg as any).periodicSync?.unregister('rain-check').catch(() => {})
-      return
-    }
+    if (rainAlertBusy) return
 
-    // 开启：先请求通知权限
-    const perm = await Notification.requestPermission()
-    if (perm !== 'granted') {
-      gpsError = '通知权限被拒绝，无法开启降雨提醒'
-      return
-    }
+    rainAlertBusy = true
+    gpsError = ''
 
-    // 注册 periodic sync
-    const reg = await navigator.serviceWorker.ready
     try {
-      await (reg as any).periodicSync.register('rain-check', { minInterval: 60 * 60 * 1000 })
-    } catch {
-      gpsError = '后台同步注册失败，可能需要将应用添加到桌面'
-      return
-    }
+      if (rainAlertOn) {
+        const reg = await navigator.serviceWorker.ready
+        const subscription = await reg.pushManager.getSubscription()
+        if (subscription) {
+          await deleteRainAlertSubscription(subscription)
+          await subscription.unsubscribe()
+        }
 
-    // 写入配置
-    const loc = loadLocation()
-    if (loc) {
-      await saveRainAlertConfig(loc.lng, loc.lat, true)
+        rainAlertOn = false
+        saveRainAlertPref(false)
+        return
+      }
+
+      const perm = Notification.permission === 'granted'
+        ? 'granted'
+        : await Notification.requestPermission()
+      if (perm !== 'granted') {
+        throw new Error('通知权限被拒绝，无法开启降雨提醒')
+      }
+
+      const reg = await navigator.serviceWorker.ready
+      const subscription = await getOrCreatePushSubscription(reg)
+      const loc = await getRainAlertLocation()
+      await saveRainAlertSubscription(subscription, loc.lng, loc.lat)
+
+      rainAlertOn = true
+      saveRainAlertPref(true)
+    } catch (error) {
+      gpsError = getErrorMessage(error, '降雨提醒设置失败')
+    } finally {
+      rainAlertBusy = false
     }
-    rainAlertOn = true
-    saveRainAlertPref(true)
   }
 
   async function fetchWeatherData(lng: number, lat: number) {
@@ -101,24 +151,17 @@
     phase = 'locating'
 
     try {
-      if (!navigator.geolocation) {
-        throw new Error('当前环境不支持定位 (可能因为未开启 HTTPS)')
-      }
+      const location = await requestCurrentLocation()
+      await fetchWeatherData(location.lng, location.lat)
 
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          timeout: Infinity,
-          maximumAge: 0,
-          enableHighAccuracy: true,
-        })
-      })
-      const { longitude: lng, latitude: lat } = pos.coords
-      saveLocation(lng, lat)
-      // 如果降雨提醒开启，同步更新 Cache API 中的坐标
       if (rainAlertOn) {
-        await saveRainAlertConfig(lng, lat, true)
+        try {
+          await syncRainAlertLocation(location.lng, location.lat)
+        } catch (error) {
+          gpsError = getErrorMessage(error, '位置已更新，但降雨提醒同步失败')
+        }
       }
-      await fetchWeatherData(lng, lat)
+      return
     } catch (err: any) {
       let msg = err.message || '定位失败'
       if (err instanceof GeolocationPositionError) {
@@ -182,6 +225,7 @@
             class="rain-alert-btn"
             class:active={rainAlertOn}
             aria-label={rainAlertOn ? '关闭降雨提醒' : '开启降雨提醒'}
+            disabled={rainAlertBusy}
             onclick={toggleRainAlert}
           >🔔</button>
         {/if}
@@ -312,6 +356,12 @@
   .rain-alert-btn:hover {
     transform: translateY(-1px);
     border-color: rgb(255 255 255 / 26%);
+  }
+
+  .rain-alert-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+    transform: none;
   }
 
   .rain-alert-btn.active {
