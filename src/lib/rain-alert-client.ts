@@ -23,11 +23,17 @@ async function readJson<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>
 }
 
-function base64UrlToUint8Array(value: string): Uint8Array {
+function base64UrlToArrayBuffer(value: string): ArrayBuffer {
   const padding = '='.repeat((4 - (value.length % 4)) % 4)
   const base64 = `${value}${padding}`.replace(/-/g, '+').replace(/_/g, '/')
   const raw = atob(base64)
-  return Uint8Array.from(raw, (char) => char.charCodeAt(0))
+  const bytes = new Uint8Array(raw.length)
+
+  for (let index = 0; index < raw.length; index += 1) {
+    bytes[index] = raw.charCodeAt(index)
+  }
+
+  return bytes.buffer
 }
 
 async function fetchVapidPublicKey(): Promise<string> {
@@ -65,7 +71,7 @@ export async function getOrCreatePushSubscription(
   const publicKey = await fetchVapidPublicKey()
   return registration.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: base64UrlToUint8Array(publicKey),
+    applicationServerKey: base64UrlToArrayBuffer(publicKey),
   })
 }
 
