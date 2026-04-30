@@ -68,7 +68,8 @@ export function createRainAlertService({
 
       for (const group of groups) {
         const snapshot = await fetchRainSnapshot(caiyunToken, group.lng, group.lat)
-        if (!shouldAlertRain(snapshot.currentSkycon, snapshot.nextHourSkycon)) {
+        const forceAlert = process.env.FORCE_RAIN_ALERT === '1'
+        if (!forceAlert && !shouldAlertRain(snapshot.currentSkycon, snapshot.nextHourSkycon)) {
           continue
         }
 

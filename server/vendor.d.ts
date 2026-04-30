@@ -27,9 +27,13 @@ declare module 'web-push' {
     }
   }
 
+  interface SendNotificationOptions {
+    proxy?: string
+  }
+
   interface WebPush {
     setVapidDetails(subject: string, publicKey: string, privateKey: string): void
-    sendNotification(subscription: PushSubscription, payload?: string): Promise<void>
+    sendNotification(subscription: PushSubscription, payload?: string, options?: SendNotificationOptions): Promise<void>
   }
 
   const webpush: WebPush

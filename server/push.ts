@@ -15,6 +15,7 @@ export async function sendPushNotification(
   subscription: StoredSubscription,
   payload: RainAlertPushPayload,
 ): Promise<'sent' | 'expired' | 'failed'> {
+  const proxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY
   try {
     await webpush.sendNotification(
       {
@@ -26,6 +27,7 @@ export async function sendPushNotification(
         },
       },
       JSON.stringify(payload),
+      proxy ? { proxy } : undefined,
     )
 
     return 'sent'

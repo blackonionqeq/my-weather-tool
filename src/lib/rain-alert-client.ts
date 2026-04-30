@@ -33,7 +33,7 @@ function base64UrlToArrayBuffer(value: string): ArrayBuffer {
     bytes[index] = raw.charCodeAt(index)
   }
 
-  return bytes.buffer
+  return bytes.buffer as ArrayBuffer
 }
 
 async function fetchVapidPublicKey(): Promise<string> {

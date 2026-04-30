@@ -30,7 +30,7 @@ export default defineConfig(({ mode }) => {
       proxy,
     },
     plugins: [
-      basicSsl(),
+      // basicSsl(),
       svelte(),
       VitePWA({
         strategies: 'injectManifest',
