@@ -24,6 +24,7 @@ export interface RainAlertRunSummary {
 interface RainAlertServiceDependencies {
   caiyunToken: string
   database: RainAlertDatabase
+  alertCooldownHours: number
 }
 
 interface SubscriptionGroup {
@@ -56,7 +57,15 @@ function groupSubscriptionsByLocation(subscriptions: StoredSubscription[]): Subs
 export function createRainAlertService({
   caiyunToken,
   database,
+  alertCooldownHours,
 }: RainAlertServiceDependencies) {
+  const cooldownMs = alertCooldownHours * 60 * 60 * 1000
+
+  function isInCooldown(subscription: StoredSubscription): boolean {
+    if (!subscription.lastAlertedAt) return false
+    return Date.now() - new Date(subscription.lastAlertedAt).getTime() < cooldownMs
+  }
+
   return {
     async runCheck(): Promise<RainAlertRunSummary> {
       const subscriptions = database.listSubscriptions()
@@ -67,26 +76,33 @@ export function createRainAlertService({
       let expiredSubscriptions = 0
 
       for (const group of groups) {
-        const snapshot = await fetchRainSnapshot(caiyunToken, group.lng, group.lat)
         const forceAlert = process.env.FORCE_RAIN_ALERT === '1'
+        const eligibleSubscriptions = forceAlert
+          ? group.subscriptions
+          : group.subscriptions.filter((s) => !isInCooldown(s))
+
+        if (eligibleSubscriptions.length === 0) continue
+
+        const snapshot = await fetchRainSnapshot(caiyunToken, group.lng, group.lat)
         if (!forceAlert && !shouldAlertRain(snapshot.currentSkycon, snapshot.nextHourSkycon)) {
           continue
         }
 
         matchedLocations += 1
         const results = await Promise.all(
-          group.subscriptions.map((subscription) => sendPushNotification(subscription, RAIN_ALERT_PAYLOAD)),
+          eligibleSubscriptions.map((subscription) => sendPushNotification(subscription, RAIN_ALERT_PAYLOAD)),
         )
 
         results.forEach((result, index) => {
           if (result === 'sent') {
             notificationsSent += 1
+            database.markAlerted(eligibleSubscriptions[index]!.endpoint)
             return
           }
 
           if (result === 'expired') {
             expiredSubscriptions += 1
-            const subscription = group.subscriptions[index]
+            const subscription = eligibleSubscriptions[index]
             if (subscription) {
               database.deleteSubscription(subscription.endpoint)
             }

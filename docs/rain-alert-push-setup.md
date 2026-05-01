@@ -12,6 +12,8 @@
 - `VAPID_SUBJECT`: VAPID subject，推荐 `mailto:you@example.com`
 - `RAIN_ALERT_DB_PATH`: SQLite 文件路径，例如 `./data/rain-alert.sqlite`
 - `RAIN_ALERT_PORT`: 轻服务监听端口，默认 `8787`
+- `HTTPS_PROXY` / `HTTP_PROXY`: （可选）HTTP 代理地址，用于国内服务器绕过 GFW 连接 Google FCM，例如 `http://<overseas-server-ip>:8888`
+- `FORCE_RAIN_ALERT`: （可选，仅本地调试）设为 `1` 时跳过雨天判断，对所有订阅强制发推送
 
 ## 生成 VAPID 密钥
 
@@ -70,6 +72,10 @@ pnpm run server:check
 ```
 
 9. 观察浏览器是否收到通知，并验证点击通知后能返回应用。
+
+> **调试技巧**：如果当前不是雨天，可以在 `.env` 里临时加 `FORCE_RAIN_ALERT=1`，让 `server:check` 跳过雨天判断直接发推送。调试完记得删掉。
+
+> **国内服务器**：Node.js 不读取系统代理，需要在 `.env` 里显式设置 `HTTPS_PROXY=http://<overseas-server-ip>:8888` 才能连通 Google FCM。国外服务器可用 tinyproxy 搭建，并通过 `Allow` 指令限制只允许你的国内服务器 IP 访问。
 
 ## Preview 与 HTTPS
 

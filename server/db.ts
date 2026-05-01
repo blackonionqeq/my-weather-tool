@@ -11,12 +11,14 @@ export interface StoredSubscription {
   lat: number
   createdAt: string
   updatedAt: string
+  lastAlertedAt: string | null
 }
 
 export interface RainAlertDatabase {
   upsertSubscription(subscription: SerializablePushSubscription, location: RainAlertLocation): void
   deleteSubscription(endpoint: string): number
   listSubscriptions(): StoredSubscription[]
+  markAlerted(endpoint: string): void
   close(): void
 }
 
@@ -28,6 +30,7 @@ interface SubscriptionRow {
   lat: number
   created_at: string
   updated_at: string
+  last_alerted_at: string | null
 }
 
 export function createRainAlertDatabase(dbPath: string): RainAlertDatabase {
@@ -43,7 +46,8 @@ export function createRainAlertDatabase(dbPath: string): RainAlertDatabase {
       lng REAL NOT NULL,
       lat REAL NOT NULL,
       created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      last_alerted_at TEXT
     )
   `)
 
@@ -74,7 +78,8 @@ export function createRainAlertDatabase(dbPath: string): RainAlertDatabase {
   `)
 
   const deleteStatement = database.prepare('DELETE FROM subscriptions WHERE endpoint = ?')
-  const listStatement = database.prepare('SELECT endpoint, p256dh, auth, lng, lat, created_at, updated_at FROM subscriptions ORDER BY updated_at DESC')
+  const listStatement = database.prepare('SELECT endpoint, p256dh, auth, lng, lat, created_at, updated_at, last_alerted_at FROM subscriptions ORDER BY updated_at DESC')
+  const markAlertedStatement = database.prepare('UPDATE subscriptions SET last_alerted_at = ? WHERE endpoint = ?')
 
   return {
     upsertSubscription(subscription, location) {
@@ -101,7 +106,11 @@ export function createRainAlertDatabase(dbPath: string): RainAlertDatabase {
         lat: row.lat,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
+        lastAlertedAt: row.last_alerted_at,
       }))
+    },
+    markAlerted(endpoint) {
+      markAlertedStatement.run([new Date().toISOString(), endpoint])
     },
     close() {
       database.close()

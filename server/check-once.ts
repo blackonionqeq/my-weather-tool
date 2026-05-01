@@ -13,6 +13,7 @@ async function main(): Promise<void> {
     const service = createRainAlertService({
       caiyunToken: config.caiyunToken,
       database,
+      alertCooldownHours: config.alertCooldownHours,
     })
     const summary = await service.runCheck()
     console.log('[rain-alert] manual run finished', summary)

@@ -7,6 +7,7 @@ export interface ServerConfig {
   vapidPrivateKey: string
   vapidSubject: string
   dbPath: string
+  alertCooldownHours: number
 }
 
 function requireEnv(env: NodeJS.ProcessEnv, key: string): string {
@@ -36,6 +37,15 @@ function parseVapidSubject(value: string | undefined): string {
   return subject
 }
 
+function parseAlertCooldownHours(value: string | undefined): number {
+  if (!value) return 3
+  const hours = Number.parseFloat(value)
+  if (!Number.isFinite(hours) || hours < 0) {
+    throw new Error(`Invalid ALERT_COOLDOWN_HOURS: ${value}`)
+  }
+  return hours
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   return {
     port: parsePort(env.RAIN_ALERT_PORT ?? env.PORT ?? '8787'),
@@ -44,5 +54,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     vapidPrivateKey: requireEnv(env, 'VAPID_PRIVATE_KEY'),
     vapidSubject: parseVapidSubject(env.VAPID_SUBJECT),
     dbPath: requireEnv(env, 'RAIN_ALERT_DB_PATH'),
+    alertCooldownHours: parseAlertCooldownHours(env.ALERT_COOLDOWN_HOURS),
   }
 }

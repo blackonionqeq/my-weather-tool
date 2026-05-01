@@ -10,6 +10,7 @@ const database = createRainAlertDatabase(config.dbPath)
 const rainAlertService = createRainAlertService({
   caiyunToken: config.caiyunToken,
   database,
+  alertCooldownHours: config.alertCooldownHours,
 })
 
 configureWebPush(config)
