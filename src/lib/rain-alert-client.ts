@@ -101,8 +101,9 @@ export async function deleteRainAlertSubscription(subscription: PushSubscription
     ? subscription
     : serializePushSubscription(subscription).endpoint
 
-  const response = await fetch(`${BASE_URL}/subscriptions`, {
-    method: 'DELETE',
+  // 改用 POST 请求，因为对方服务器防火墙/WAF 会直接 Drop 掉 DELETE 请求
+  const response = await fetch(`${BASE_URL}/subscriptions/delete`, {
+    method: 'POST',
     headers: {
       'content-type': 'application/json',
     },

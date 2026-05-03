@@ -68,6 +68,19 @@ export function createHttpServer({ config, database }: HttpServerDependencies) {
         return
       }
 
+      if (url.pathname === '/api/rain-alert/subscriptions/delete') {
+        if (method === 'POST') {
+          const body = parseDeleteSubscriptionBody(await readJsonBody(request))
+          database.deleteSubscription(body.endpoint)
+          sendNoContent(response)
+          return
+        }
+        
+        response.writeHead(405, { allow: 'POST' })
+        response.end()
+        return
+      }
+
       response.writeHead(404)
       response.end('Not found')
     } catch (error) {
