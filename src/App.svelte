@@ -267,7 +267,11 @@
   .app-shell {
     position: relative;
     min-height: 100dvh;
-    padding: clamp(16px, 3vw, 28px);
+    padding:
+      calc(env(safe-area-inset-top, 0px) + clamp(16px, 3vw, 28px))
+      calc(env(safe-area-inset-right, 0px) + clamp(16px, 3vw, 28px))
+      calc(env(safe-area-inset-bottom, 0px) + clamp(16px, 3vw, 28px))
+      calc(env(safe-area-inset-left, 0px) + clamp(16px, 3vw, 28px));
     overflow: hidden;
   }
 
