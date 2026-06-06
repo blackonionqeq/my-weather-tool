@@ -3,6 +3,8 @@ import 'dotenv/config'
 export interface ServerConfig {
   port: number
   caiyunToken: string
+  qweatherApiHost: string
+  qweatherApiKey: string
   vapidPublicKey: string
   vapidPrivateKey: string
   vapidSubject: string
@@ -50,6 +52,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   return {
     port: parsePort(env.RAIN_ALERT_PORT ?? env.PORT ?? '8787'),
     caiyunToken: requireEnv(env, 'CAIYUN_TOKEN'),
+    qweatherApiHost: requireEnv(env, 'QWEATHER_API_HOST').replace(/\/+$/, ''),
+    qweatherApiKey: requireEnv(env, 'QWEATHER_API_KEY'),
     vapidPublicKey: requireEnv(env, 'VAPID_PUBLIC_KEY'),
     vapidPrivateKey: requireEnv(env, 'VAPID_PRIVATE_KEY'),
     vapidSubject: parseVapidSubject(env.VAPID_SUBJECT),

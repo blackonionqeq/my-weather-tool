@@ -46,6 +46,18 @@ export interface DailyResult {
   }
 }
 
+export interface MinutelyRainItem {
+  fxTime: string
+  precip: number
+  type: string
+}
+
+export interface MinutelyRainResult {
+  updateTime: string
+  summary: string
+  items: MinutelyRainItem[]
+}
+
 export interface WeatherCache {
   realtime: RealtimeResult
   hourly: HourlyResult

@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { ServerConfig } from './config.js'
 import type { RainAlertDatabase } from './db.js'
+import { fetchMinutelyRain } from './qweather.js'
 import { parseDeleteSubscriptionBody, parseUpsertSubscriptionBody } from './validation.js'
 
 interface HttpServerDependencies {
@@ -29,6 +30,19 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   }
 
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
+}
+
+function parseCoordinate(value: string | null, label: string): number {
+  if (value === null) {
+    throw new Error(`Missing ${label}`)
+  }
+
+  const coordinate = Number.parseFloat(value)
+  if (!Number.isFinite(coordinate)) {
+    throw new Error(`Invalid ${label}`)
+  }
+
+  return coordinate
 }
 
 export function createHttpServer({ config, database }: HttpServerDependencies) {
@@ -78,6 +92,20 @@ export function createHttpServer({ config, database }: HttpServerDependencies) {
         
         response.writeHead(405, { allow: 'POST' })
         response.end()
+        return
+      }
+
+      if (url.pathname === '/api/qweather/minutely') {
+        if (method !== 'GET') {
+          response.writeHead(405, { allow: 'GET' })
+          response.end()
+          return
+        }
+
+        const lng = parseCoordinate(url.searchParams.get('lng'), 'lng')
+        const lat = parseCoordinate(url.searchParams.get('lat'), 'lat')
+        const rain = await fetchMinutelyRain(config.qweatherApiHost, config.qweatherApiKey, lng, lat)
+        sendJson(response, 200, rain)
         return
       }
 

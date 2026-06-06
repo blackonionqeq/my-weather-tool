@@ -1,4 +1,4 @@
-import type { RealtimeResult, HourlyResult, DailyResult } from './types'
+import type { RealtimeResult, HourlyResult, DailyResult, MinutelyRainResult } from './types'
 
 // Token 由服务端注入（Nginx 代理 / Vite dev proxy），前端不再持有
 const BASE_URL = '/api/caiyun'
@@ -19,4 +19,8 @@ export async function fetchHourly(lng: number, lat: number): Promise<HourlyResul
 
 export async function fetchDaily(lng: number, lat: number): Promise<DailyResult> {
   return fetchJson(`${BASE_URL}/${lng},${lat}/daily?dailysteps=3`)
+}
+
+export async function fetchMinutelyRain(lng: number, lat: number): Promise<MinutelyRainResult> {
+  return fetchJson(`/api/qweather/minutely?lng=${lng}&lat=${lat}`)
 }

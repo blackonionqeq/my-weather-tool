@@ -5,6 +5,7 @@
 ## 核心功能
 
 - 当前天气、未来 48 小时预报、近 3 天预报
+- 按需查询和风天气近 2 小时 5 分钟级降水
 - 优先使用缓存坐标，减少首次打开等待时间
 - 离线时回退到本地缓存天气数据
 - 通过 VAPID Web Push 接收即将下雨提醒
@@ -63,6 +64,8 @@ pnpm server:check     # 手动触发一次降雨检查
 - `VITE_CAIYUN_TOKEN`: 前端开发代理使用的彩云 token
 - `VITE_RAIN_ALERT_SERVER_ORIGIN`: 本地开发时雨提醒服务地址，默认 `http://127.0.0.1:8787`
 - `CAIYUN_TOKEN`: 服务端天气拉取使用的彩云 token
+- `QWEATHER_API_HOST`: 和风天气控制台分配的天气 API Host，例如 `https://xxxxx.re.qweatherapi.com`
+- `QWEATHER_API_KEY`: 和风天气 API key，用于按需查询 5 分钟级降水
 - `VAPID_PUBLIC_KEY`: Web Push 公钥
 - `VAPID_PRIVATE_KEY`: Web Push 私钥
 - `VAPID_SUBJECT`: VAPID subject，推荐 `mailto:you@example.com`
@@ -87,6 +90,7 @@ pnpm server:check     # 手动触发一次降雨检查
 GET    /api/rain-alert/public-key
 POST   /api/rain-alert/subscriptions
 DELETE /api/rain-alert/subscriptions
+GET    /api/qweather/minutely?lng={lng}&lat={lat}
 ```
 
 部署和 VAPID 配置见 [docs/rain-alert-push-setup.md](docs/rain-alert-push-setup.md)。
@@ -107,3 +111,4 @@ my-weather-tool/
 
 - [docs/rain-alert-push-setup.md](docs/rain-alert-push-setup.md)：Web Push 本地和部署配置
 - [docs/superpowers/specs/2026-04-06-rain-alert-design.md](docs/superpowers/specs/2026-04-06-rain-alert-design.md)：降雨提醒设计稿
+- [docs/superpowers/specs/2026-06-06-qweather-minutely-rain-design.md](docs/superpowers/specs/2026-06-06-qweather-minutely-rain-design.md)：和风短时降水设计稿

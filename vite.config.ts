@@ -18,6 +18,11 @@ export default defineConfig(({ mode }) => {
       changeOrigin: true,
       secure: false,
     },
+    '/api/qweather': {
+      target: env.VITE_RAIN_ALERT_SERVER_ORIGIN || 'http://127.0.0.1:8787',
+      changeOrigin: true,
+      secure: false,
+    },
   }
 
   return {
